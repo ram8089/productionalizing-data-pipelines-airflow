@@ -1,46 +1,50 @@
-version: '2.1'
+version: "3.7"
 services:
+    postgres:
+        image: postgres:9.6
+        environment:
+            - POSTGRES_USER=airflow
+            - POSTGRES_PASSWORD=airflow
+            - POSTGRES_DB=airflow
+        logging:
+            options:
+                max-size: 10m
+                max-file: "3"
+        volumes:
+            - ./setup/raw_input_data:/data
+            - ./temp:/temp
+        ports:
+            - "5432:5432"
 
-
-  postgres:
-    build: ./docker/postgres
-    image: pluralsight/postgres
-    restart: always
-    container_name: postgres
-    ports:
-      - "32769:5432"
-    environment:
-      - POSTGRES_USER=airflow
-      - POSTGRES_PASSWORD=airflow
-      - POSTGRES_DB=airflow
-    healthcheck:
-      test: [ "CMD", "pg_isready", "-q", "-d", "airflow", "-U", "airflow" ]
-      timeout: 45s
-      interval: 10s
-      retries: 10
-
-
-
-  airflow:
-    build: ./docker/airflow
-    image: pluralsight/airflow
-    restart: always
-    container_name: airflow
-    environment:
-      - AIRFLOW__CORE__FERNET_KEY="Z27wHAQxCObGWbIYyp06PlNoNlV7hyLO5zT74itoQww="
-    volumes:
-      - ./dags:/usr/local/airflow/dags
-    ports:
-      - 8080:8080
-    depends_on:
-      - postgres
-    healthcheck:
-      test: [ "CMD", "nc", "-z", "airflow", "8080" ]
-      timeout: 45s
-      interval: 10s
-      retries: 10
-
-
-networks:
-  default:
-    name: airflow-network
+    webserver:
+        image: puckel/docker-airflow:1.10.9
+        restart: always
+        depends_on:
+            - postgres
+        environment:
+            - LOAD_EX=n
+            - EXECUTOR=Local
+            - AIRFLOW_CONN_POSTGRES_DEFAULT=postgres://airflow:airflow@postgres:5432/airflow
+            - FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+            - AWS_SHARED_CREDENTIALS_FILE=/usr/local/airflow/.aws/credentials
+        logging:
+            options:
+                max-size: 10m
+                max-file: "3"
+        volumes:
+            - ./dags:/usr/local/airflow/dags
+            # - ./plugins:/usr/local/airflow/plugins
+            # for linux based systems
+            - ./requirements.txt:/requirements.txt
+            - ~/.aws:/usr/local/airflow/.aws/
+            - ./temp:/temp
+            - ./setup/raw_input_data:/data
+        ports:
+            - "8080:8080"
+        command: webserver
+        healthcheck:
+            test:
+                ["CMD-SHELL", "[ -f /usr/local/airflow/airflow-webserver.pid ]"]
+            interval: 30s
+            timeout: 30s
+            retries: 3
